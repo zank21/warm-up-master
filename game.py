@@ -1,7 +1,4 @@
-import random
-from pprint import pprint
-
-
+# version Alpha 1.0 (No tests)
 class User:
     def __init__(self, user_id: int, name: str):
         self.id = user_id
@@ -11,17 +8,15 @@ class User:
         self.points = 0
         self.last_command = 'None'
 
-    def add_point(self, number_point: int):
-        self.points = + number_point
-
 
 class Question:
-    def __init__(self, text: str, author_id: int):
+    def __init__(self, author_id: int, text: str):
         self.id = id(self)
         self.text = text
         self.author_id = author_id
         self.round = None
         self.is_got = False
+        self.is_activate = True
 
 
 class Answer:
@@ -34,66 +29,13 @@ class Answer:
         self.votes = 0
         self.win_percentage = 0
 
-    def add_vote(self):
-        self.votes += 1
-
-
-class AnswerQuestion:
-    def __init__(self, question_object):
-        self.id = id(self)
-        self.question_id = question_object.id
-        self.question_text = question_object.text
-        self.question_author = question_object.author
-        self.answer_count = 0
-        self.answers_list = []
-        self.round_name = question_object.round_name
-
-    def add_answer(self, answer):
-        self.answers_list.append(answer)
-        self.answer_count += 1
-
-    def generate_win_percentage(self):
-        total_votes = sum(answer.votes for answer in self.answers_list)
-        for answer in self.answers_list:
-            percentage = int(round(answer.votes / total_votes, 2) * 100)
-            answer.win_percentage = percentage
-
-
-class Score:
-    def __init__(self):
-        self.dict = {}
-        self.str = ''
-
-    def __sub__(self, other):
-        new_score = Score()
-        for key in self.dict:
-            score_1 = self.dict.get(key)
-            score_2 = other.dict.get(key, 0)
-            difference = score_1 - score_2
-            new_score.dict.update({
-                key: difference
-            })
-            new_score.str += f'{key} - {difference} \n'
-        return new_score
-
-    def add_users(self, users_list):
-        for user in users_list:
-            self.dict.update({
-                user.id: user.score
-            })
-            self.str += f'{user.name} - {user.score} \n'
-
-    def add_user(self, user):
-        self.dict.update({
-            user.id: user.score
-        })
-        self.str += f'{user.name} - {user.score} \n'
-
 
 class Round:
-    def __init__(self, name: str, number_round: int):
+    def __init__(self, number_round: int, name: str = 'round', coefficient: int = 1):
         self.name = name
         self.number_round = number_round
+        self.coefficient = coefficient
+        self.score = []
 
 
 class Game:
@@ -103,14 +45,14 @@ class Game:
         self.questions_list = []
         self.answers_list = []
         self.number_round = 0
-        self.round_now = Round('start', 0)
-        self.score = Score()
+        self.round_now = Round(0)
 
     def add_user(self, user: User):
         self.users_list.append(user)
 
-    def get_score(self):
+    def get_score(self) -> list:
         score = sorted(self.users_list, key=lambda user: user.points)
+        self.round_now.score = score
         return score
 
     def new_round(self, round: Round):
@@ -125,23 +67,51 @@ class Game:
         answer.round = self.round_now
         self.answers_list.append(answer)
 
-    def get_question(self, user_id: int):
+    def get_question(self, user_id: int) -> Question:
         user = self.__get_obj_user(user_id)
         for question in self.questions_list:
             if question.round == self.round_now and question.author_id != user.id and not question.is_got:
                 question.is_got = True
                 return question
+            else:
+                return Question(text='<none>', author_id=0)
 
-    def __get_obj_user(self, user_id: int):
+    def get_answer_question(self) -> list:
+        for question in self.questions_list:
+            if question.is_activate and question.round == self.round_now:
+                question.is_activate = False
+                return [question, [answer for answer in self.answers_list if answer.question_id == question.id]]
+
+        return []
+
+    def __get_obj_user(self, user_id: int) -> User:
         for user in self.users_list:
             if user.id == user_id:
                 return user
 
-    def __get_obj_answer(self, answer_id):
+    def __get_obj_answer(self, answer_id) -> Answer:
         for answer in self.users_list:
             if answer.id == answer_id:
                 return answer
 
     def add_vote_to_answer(self, answer_id):
         answer = self.__get_obj_answer(answer_id)
-        answer.add_vote()
+        answer.votes += 1
+
+    def add_points(self, question_id: int) -> list:
+        answers = [answer for answer in self.answers_list if answer.question_id == question_id]
+        total_votes = sum([answer.votes for answer in answers])
+        result = {}
+        for answer in answers:
+            percent = (answer.votes * 100) // total_votes
+            points = percent * self.round_now.coefficient
+            user = self.__get_obj_user(answer.author_id)
+            result.update({user: points})
+            user.points += points
+        result = result.items()
+        result = sorted(result, key=lambda user: user[1], reverse=True)
+        return result
+
+    def add_vote(self, answer_id: int):
+        answer = self.__get_obj_answer(answer_id)
+        answer.votes += 1
